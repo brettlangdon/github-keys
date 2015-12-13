@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -21,7 +20,7 @@ var cache []string = make([]string, 0)
 var expire int64 = 0
 
 func fetchKeys() error {
-	fmt.Fprintf(os.Stderr, "Fetching keys for GitHub user \"%s\"\n", *username)
+	log.Printf("Fetching keys for GitHub user \"%s\"\n", *username)
 	var resp *http.Response
 	var err error
 	var uri string = fmt.Sprintf("https://api.github.com/users/%s/keys", *username)
@@ -86,8 +85,7 @@ func handle(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(status)
 	fmt.Fprintf(w, response)
 
-	fmt.Fprintf(
-		os.Stdout,
+	log.Printf(
 		"\"%d\"\t\"%d\"\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\n",
 		status, len(response), r.Method, r.URL, r.Proto, r.Host, r.RemoteAddr, r.UserAgent(),
 	)
@@ -105,7 +103,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Starting server on \"%s\" for GitHub user \"%s\"\n", *listen, *username)
+	log.Printf("Starting server on \"%s\" for GitHub user \"%s\"\n", *listen, *username)
 	http.HandleFunc("/", handle)
 	err = http.ListenAndServe(*listen, nil)
 	if err != nil {
