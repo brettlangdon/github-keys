@@ -7,8 +7,11 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
+
+var NO_RESPONSE string = ""
 
 var listen *string = flag.String("listen", ":8000", "\"[address]:<port>\" to bind to. [default: \":8000\"]")
 var username *string = flag.String("username", "", "GitHub username to fetch keys for. [required]")
@@ -18,7 +21,7 @@ var cache []string = make([]string, 0)
 var expire int64 = 0
 
 func fetchKeys() error {
-	fmt.Printf("Fetching keys for GitHub user \"%s\"\n", *username)
+	fmt.Fprintf(os.Stderr, "Fetching keys for GitHub user \"%s\"\n", *username)
 	var resp *http.Response
 	var err error
 	var uri string = fmt.Sprintf("https://api.github.com/users/%s/keys", *username)
@@ -51,15 +54,9 @@ func fetchKeys() error {
 	return nil
 }
 
-func logRequest(r *http.Request) {
-	fmt.Printf("\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"", r.Method, r.URL, r.Proto, r.Host, r.RemoteAddr, r.RequestURI)
-}
-
-func handle(w http.ResponseWriter, r *http.Request) {
-	logRequest(r)
+func getResponse(r *http.Request) (int, string) {
 	if r.Method != "GET" {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
+		return http.StatusMethodNotAllowed, NO_RESPONSE
 	}
 
 	var err error
@@ -67,19 +64,33 @@ func handle(w http.ResponseWriter, r *http.Request) {
 	if now >= expire {
 		err = fetchKeys()
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return http.StatusInternalServerError, NO_RESPONSE
 		}
 	}
 
 	if len(cache) > 0 {
-		w.WriteHeader(http.StatusOK)
+		var response string = ""
 		for _, key := range cache {
-			fmt.Fprintf(w, "%s\n", key)
+			response += fmt.Sprintf("%s\n", key)
 		}
-	} else {
-		w.WriteHeader(http.StatusNoContent)
+		return http.StatusOK, response
 	}
+
+	return http.StatusNoContent, NO_RESPONSE
+}
+
+func handle(w http.ResponseWriter, r *http.Request) {
+	var status int
+	var response string
+	status, response = getResponse(r)
+	w.WriteHeader(status)
+	fmt.Fprintf(w, response)
+
+	fmt.Fprintf(
+		os.Stdout,
+		"\"%d\"\t\"%d\"\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\n",
+		status, len(response), r.Method, r.URL, r.Proto, r.Host, r.RemoteAddr, r.UserAgent(),
+	)
 }
 
 func main() {
@@ -94,7 +105,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Starting server on \"%s\" for GitHub user \"%s\"\n", *listen, *username)
+	fmt.Fprintf(os.Stderr, "Starting server on \"%s\" for GitHub user \"%s\"\n", *listen, *username)
 	http.HandleFunc("/", handle)
 	err = http.ListenAndServe(*listen, nil)
 	if err != nil {
